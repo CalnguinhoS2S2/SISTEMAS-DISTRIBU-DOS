@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>TweetApp - Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 2rem; background: #f6f7fb; color: #333; }
+        h1, h2 { color: #2d3846; }
+        section { background: #fff; padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; box-shadow: 0 2px 6px rgba(0,0,0,0.1); }
+        label { display: block; margin-top: 0.5rem; }
+        input, textarea { width: 100%; padding: 0.5rem; margin-top: 0.25rem; border: 1px solid #cfd2da; border-radius: 4px; }
+        button { margin-top: 1rem; padding: 0.75rem 1.5rem; background: #3478f6; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background: #245ed4; }
+        ul { list-style: none; padding: 0; }
+        li { padding: 0.5rem 0; border-bottom: 1px solid #e5e8ef; }
+        .tweet { margin-bottom: 1rem; }
+        .tweet small { color: #555; display: block; }
+        .error { color: #c0392b; margin-top: 0.5rem; }
+        .hint { font-size: 0.9rem; color: #555; margin-top: 0.25rem; }
+    </style>
+</head>
+<body>
+<h1>TweetApp</h1>
+<p>Teste a API preenchendo os formulários abaixo. Também é possível acessar a documentação interativa em <a href="/swagger-ui.html" target="_blank">/swagger-ui.html</a>.</p>
+
+<section>
+    <h2>Novo usuário</h2>
+    <form id="user-form">
+        <label>Handle (@):
+            <input name="handle" required maxlength="40">
+        </label>
+        <label>Nome de exibição:
+            <input name="displayName" required maxlength="120">
+        </label>
+        <label>Senha:
+            <input type="password" name="password" required minlength="6" maxlength="120">
+        </label>
+        <label>URL da imagem de perfil:
+            <input name="profileImageUrl" maxlength="512">
+        </label>
+        <label>Biografia:
+            <textarea name="bio" maxlength="512"></textarea>
+        </label>
+        <button type="submit">Cadastrar</button>
+        <div id="user-error" class="error"></div>
+    </form>
+    <ul id="user-list"></ul>
+</section>
+
+<section>
+    <h2>Novo tweet</h2>
+    <form id="tweet-form">
+        <label>Handle do autor (@):
+            <input name="authorHandle" required maxlength="40">
+        </label>
+        <label>Senha do autor:
+            <input type="password" name="password" required minlength="6" maxlength="120">
+        </label>
+        <label>Conteúdo:
+            <textarea name="content" required maxlength="280"></textarea>
+        </label>
+        <span class="hint">Apenas o autor com a senha correta consegue publicar ou atualizar tweets.</span>
+        <button type="submit">Enviar</button>
+        <div id="tweet-error" class="error"></div>
+    </form>
+    <div id="tweet-list"></div>
+</section>
+
+<script>
+    const userForm = document.getElementById("user-form");
+    const tweetForm = document.getElementById("tweet-form");
+    const userList = document.getElementById("user-list");
+    const tweetList = document.getElementById("tweet-list");
+    const userError = document.getElementById("user-error");
+    const tweetError = document.getElementById("tweet-error");
+
+    const readJson = (response) => response.json();
+    const handleError = (error, target) => {
+        console.error(error);
+        if (error && typeof error === "object") {
+            const message = error.message || error.error || JSON.stringify(error);
+            target.textContent = message;
+        } else {
+            target.textContent = "Erro ao processar a requisição.";
+        }
+    };
+
+    const loadUsers = () => {
+        fetch("/api/users")
+            .then(readJson)
+            .then(users => {
+                userList.innerHTML = users
+                    .map(u => `<li><strong>${u.displayName}</strong> (@${u.handle}) - ${u.tweetCount} tweet(s)</li>`)
+                    .join("");
+            })
+            .catch(err => handleError(err, userError));
+    };
+
+    const loadTweets = () => {
+        fetch("/api/tweets")
+            .then(readJson)
+            .then(tweets => {
+                tweetList.innerHTML = tweets
+                    .map(t => `
+                        <article class="tweet">
+                            <p>${t.content}</p>
+                            <small>@${t.authorHandle} - ${new Date(t.createdAt).toLocaleString()}</small>
+                        </article>
+                    `)
+                    .join("");
+            })
+            .catch(err => handleError(err, tweetError));
+    };
+
+    userForm.addEventListener("submit", event => {
+        event.preventDefault();
+        userError.textContent = "";
+        const data = Object.fromEntries(new FormData(userForm));
+        fetch("/api/users", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(data)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(body => Promise.reject(body));
+                }
+                return readJson(response);
+            })
+            .then(() => {
+                userForm.reset();
+                loadUsers();
+            })
+            .catch(err => handleError(err, userError));
+    });
+
+    tweetForm.addEventListener("submit", event => {
+        event.preventDefault();
+        tweetError.textContent = "";
+        const formData = Object.fromEntries(new FormData(tweetForm));
+        const payload = {
+            authorHandle: formData.authorHandle.trim(),
+            password: formData.password,
+            content: formData.content
+        };
+        fetch("/api/tweets", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        })
+            .then(response => {
+                if (!response.ok) {
+                    return response.json().then(body => Promise.reject(body));
+                }
+                return readJson(response);
+            })
+            .then(() => {
+                tweetForm.reset();
+                loadTweets();
+            })
+            .catch(err => handleError(err, tweetError));
+    });
+
+    loadUsers();
+    loadTweets();
+</script>
+</body>
+</html>
